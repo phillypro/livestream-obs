@@ -69,52 +69,75 @@ def graceful_shutdown():
 
 def loop_function():
     while not shutdown_event.is_set():
-        cropped_frame = frame_capturer.capture_frame(600, 230, 1100, 1100)
-        if cropped_frame is not None:
-            process_account(cropped_frame)
+        try:
+            cropped_frame = frame_capturer.capture_frame(600, 230, 1100, 1100)
+            if cropped_frame is not None:
+                process_account(cropped_frame)
 
-        cropped_frame = frame_capturer.capture_frame(0, 100, 1920, 190)
-        if cropped_frame is not None:
-            process_orders(cropped_frame)
+            cropped_frame = frame_capturer.capture_frame(0, 100, 1920, 190)
+            if cropped_frame is not None:
+                process_orders(cropped_frame)
 
-        cropped_frame = frame_capturer.capture_frame(0, 0, 1400, 100)
-        if cropped_frame is not None:
-            process_chart(cropped_frame)
+            cropped_frame = frame_capturer.capture_frame(0, 0, 1400, 100)
+            if cropped_frame is not None:
+                process_chart(cropped_frame)
 
-        profit_awards()
+            profit_awards()
 
-        time.sleep(0.3)
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"Error in loop function: {e}")
+            time.sleep(1)  # Wait a bit before retrying
 
 def on_obs_ready():
     print("OBS is ready, starting Flask app...")
+    try:
+        def on_version_received(version_info):
+            if version_info:
+                print(f"OBS-WebSocket version info: {version_info}")
+            else:
+                print("Failed to retrieve OBS-WebSocket version info.")
 
-    def on_version_received(version_info):
-        if version_info:
-            print(f"OBS-WebSocket version info: {version_info}")
+        # Import globals first
+        from app.config import globals
+
+        # Start Flask app and get socketio instance
+        socketio_instance = start_flask_app(globals.settings_manager)
+        if not socketio_instance:
+            print("Failed to start Flask application")
+            graceful_shutdown()
+            return
+
+        # Get version info after flask starts
+        if hasattr(obs_client, 'get_version_async'):
+            obs_client.get_version_async(on_version_received)
+
+        # Initialize Discord bot if token exists
+        if DISCORD_BOT_TOKEN:
+            try:
+                discord_bot_instance = DiscordBot(token=DISCORD_BOT_TOKEN, socketio=socketio_instance)
+                discord_thread_instance = threading.Thread(
+                    target=lambda: discord_bot_instance.run(), 
+                    name="DiscordBotThread",
+                    daemon=True
+                )
+                discord_thread_instance.start()
+
+                # Store instances in globals using dictionary access
+                globals.__dict__['discord_bot'] = discord_bot_instance
+                globals.__dict__['discord_thread'] = discord_thread_instance
+            except Exception as e:
+                print(f"Error initializing Discord bot: {e}")
         else:
-            print("Failed to retrieve OBS-WebSocket version info.")
+            print("DISCORD_BOT_TOKEN not provided, skipping Discord bot startup.")
 
-    obs_client.get_version_async(on_version_received)
+        # Start the loop thread
+        loop_thread_instance = threading.Thread(target=loop_function, name="LoopThread", daemon=True)
+        loop_thread_instance.start()
 
-    from app.config import globals
-    socketio_instance = start_flask_app(globals.settings_manager)
-    if not socketio_instance:
-        print("Failed to start Flask application")
+    except Exception as e:
+        print(f"Error in on_obs_ready: {e}")
         graceful_shutdown()
-        return
-
-    if DISCORD_BOT_TOKEN:
-        discord_bot_instance = DiscordBot(token=DISCORD_BOT_TOKEN, socketio=socketio_instance)
-        discord_thread_instance = threading.Thread(target=discord_bot_instance.run, name="DiscordBotThread", daemon=True)
-        discord_thread_instance.start()
-
-        globals()['discord_bot'] = discord_bot_instance
-        globals()['discord_thread'] = discord_thread_instance
-    else:
-        print("DISCORD_BOT_TOKEN not provided, skipping Discord bot startup.")
-
-    loop_thread_instance = threading.Thread(target=loop_function, name="LoopThread", daemon=True)
-    loop_thread_instance.start()
 
 def on_connection_failed():
     print("Failed to connect to OBS")
@@ -123,29 +146,34 @@ def on_connection_failed():
 def main():
     global obs_client, discord_bot, discord_thread, frame_capturer, loop_thread
 
-    # Create settings_manager here
-    from app.config.globals import settings_manager as global_settings_manager
-    local_settings_manager = SettingsManager()
-    from app.config import globals
-    globals.settings_manager = local_settings_manager
+    try:
+        # Create settings_manager here
+        from app.config.globals import settings_manager as global_settings_manager
+        local_settings_manager = SettingsManager()
+        from app.config import globals
+        globals.settings_manager = local_settings_manager
 
-    signal.signal(signal.SIGINT, handle_shutdown_signal)
-    signal.signal(signal.SIGTERM, handle_shutdown_signal)
+        signal.signal(signal.SIGINT, handle_shutdown_signal)
+        signal.signal(signal.SIGTERM, handle_shutdown_signal)
 
-    frame_capturer = FrameCapturer(camera_index=8, width=1920, height=1080)
+        frame_capturer = FrameCapturer(camera_index=8, width=1920, height=1080)
 
-    print("Initializing OBS client...")
-    obs_client = ObsClient()
-    obs_client.on_ready_callback = on_obs_ready
-    obs_client.on_connection_failed_callback = on_connection_failed
-    obs_client.start_connection()
+        print("Initializing OBS client...")
+        obs_client = ObsClient()
+        obs_client.on_ready_callback = on_obs_ready
+        obs_client.on_connection_failed_callback = on_connection_failed
+        obs_client.start_connection()
 
-    print("Application initialization started...")
+        print("Application initialization started...")
 
-    if obs_available and hasattr(obs, 'script_unload'):
-        def script_unload():
-            handle_shutdown_signal(None, None)
-        obs.script_unload = script_unload
+        if obs_available and hasattr(obs, 'script_unload'):
+            def script_unload():
+                handle_shutdown_signal(None, None)
+            obs.script_unload = script_unload
+
+    except Exception as e:
+        print(f"Error in main: {e}")
+        graceful_shutdown()
 
 if __name__ == "__main__":
     main()
