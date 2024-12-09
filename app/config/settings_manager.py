@@ -1,23 +1,26 @@
 # app/config/settings_manager.py
+import threading
 
 class SettingsManager:
     def __init__(self):
-        # Placeholder: We'll store default values or load from a file
-        # For now, just hardcode or store in memory
-        self.settings = {
-            'alerts': True,
-            'broadcastAlert': True,
-            'multiplier': 3,
-            'subtitles': True,
-            'process': True,
-            'upscale': True,
-            'post_youtube': True,
-            'post_instagram': True,
-            'post_tiktok': True
+        self._lock = threading.Lock()
+        self._settings = {
+            "alerts": False,
+            "broadcastAlert": False,
+            "multiplier": 1,
+            "subtitles": True,
+            "process": False,
+            "upscale": False,
+            "post_youtube": False,
+            "post_instagram": False,
+            "post_tiktok": False
         }
 
     def get_setting(self, key):
-        return self.settings.get(key)
+        with self._lock:
+            return self._settings.get(key)
 
-    def update_settings(self, new_settings):
-        self.settings.update(new_settings)
+    def update_settings(self, settings_dict):
+        with self._lock:
+            self._settings.update(settings_dict)
+            print("Updated settings:", self._settings)
