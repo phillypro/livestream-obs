@@ -1,4 +1,3 @@
-# app/web/server.py
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -7,8 +6,6 @@ from app.config.globals import shutdown_event
 from app.utils.ports import is_port_in_use, wait_for_port_release, kill_process_on_port
 import time
 import logging
-from app.config.globals import discord_bot
-
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -56,15 +53,6 @@ def start_flask_app(settings_manager):
                     logger.error(f"Timeout waiting for port {port}")
                     return False
 
-        # Import routes here to avoid circular imports
-        try:
-            from app.web.routes import initialize_routes
-            initialize_routes(app, settings_manager, socketio, port, discord_bot)
-            logger.info("Routes initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize routes: {e}")
-            return False
-
         def run_server():
             try:
                 socketio.run(app, host='127.0.0.1', port=port, use_reloader=False, allow_unsafe_werkzeug=True)
@@ -72,11 +60,11 @@ def start_flask_app(settings_manager):
                 logger.error(f"Error in server thread: {e}")
                 server_started.clear()
 
-        # Start the flask app
+        # Start the flask app in a thread
         server_thread = Thread(target=run_server, daemon=True)
         server_thread.start()
         
-        # Wait for server to start
+        # Wait briefly to check if the server started
         time.sleep(1)
         if is_port_in_use(port):
             server_started.set()

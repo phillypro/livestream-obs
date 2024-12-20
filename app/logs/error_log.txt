@@ -239,3 +239,18 @@ Stacktrace:
 	RtlUserThreadStart [0x00007FFC8844AF38+40]
 
 [2024-12-19 10:28:46] Tesseract Error: (3221225794, '')
+[2024-12-20 06:32:03] Cannot process account - OBS not ready
+[2024-12-20 06:32:04] Cannot process account - OBS not ready
+[2024-12-20 06:32:04] Cannot process account - OBS not ready
+[2024-12-20 06:32:05] Cannot process account - OBS not ready
+[2024-12-20 06:32:06] Cannot process account - OBS not ready
+[2024-12-20 06:32:07] Cannot process account - OBS not ready
+[2024-12-20 06:32:08] Cannot process account - OBS not ready
+[2024-12-20 06:32:08] Cannot process account - OBS not ready
+[2024-12-20 06:32:09] Cannot process account - OBS not ready
+[2024-12-20 06:32:10] Cannot process account - OBS not ready
+[2024-12-20 06:32:10] Cannot process account - OBS not ready
+[2024-12-20 06:32:11] Cannot process account - OBS not ready
+[2024-12-20 06:32:11] Cannot process account - OBS not ready
+[2024-12-20 06:32:12] Cannot process account - OBS not ready
+[2024-12-20 06:32:13] Cannot process account - OBS not ready
