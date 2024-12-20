@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Highlight</title>
+    <link rel="stylesheet" media="screen" href="highlight_style.css">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/highlight_style.css') }}">
+</head>
+<body>
+    <!-- Comment container -->
+    <div id="comments-wrap">
+        <div id="commentContainer" class="comment">
+            <div class="imgwrap">
+                <img id="profileImage" src="#" alt="Profile Image">
+            </div>
+            <div class="right">
+                <div id="userName"></div>
+                <div id="commentText"></div>
+                <span id="timeStamp"></span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-mZLF4UVrpi/QTWPA7BjNPEnkIfRFn4ZEO3Qt/HFklTJBj/gBOV8G3HcKn4NfQblz" crossorigin="anonymous"></script>
+    <script type="text/javascript">
+        var socket = io();
+
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+
+        socket.on('highlight_data', function(data) {
+            console.log('Received data:', data);
+            if (data.show) {
+                displayComment(data);
+            } else {
+                hideComment();
+            }
+        });
+
+        socket.on('hide_comment', function() {
+            console.log('Received hide comment signal');
+            hideComment();
+        });
+
+        function displayComment(data) {
+            var img = document.getElementById('profileImage');
+            img.src = data.profileImageUrl;
+            img.onload = function() {
+                document.getElementById('userName').textContent = data.from;
+                document.getElementById('commentText').textContent = data.message;
+                document.getElementById('timeStamp').textContent = formatTimestamp(data.timestamp);
+
+                var commentContainer = document.getElementById('commentContainer');
+                commentContainer.classList.remove('hidden');
+                commentContainer.classList.add('visible');
+            };
+            img.onerror = function() {
+                console.error('Failed to load image');
+            };
+        }
+
+        function hideComment() {
+            var commentContainer = document.getElementById('commentContainer');
+            commentContainer.classList.remove('visible');
+            commentContainer.classList.add('hidden');
+        }
+
+        function formatTimestamp(timestamp) {
+            var date = new Date(timestamp);
+            var currentTime = new Date();
+            var differenceInSeconds = Math.floor((currentTime - date) / 1000);
+
+            var minutes = Math.floor(differenceInSeconds / 60);
+            var hours = Math.floor(minutes / 60);
+            var days = Math.floor(hours / 24);
+
+            if (days > 0) {
+                return days + (days === 1 ? " day ago" : " days ago");
+            } else if (hours > 0) {
+                return hours + (hours === 1 ? " hour ago" : " hours ago");
+            } else if (minutes > 0) {
+                return minutes + (minutes === 1 ? " minute ago" : " minutes ago");
+            } else {
+                return "Just now";
+            }
+        }
+    </script>
+</body>
+</html>

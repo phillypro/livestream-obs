@@ -4,11 +4,11 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 from threading import Thread, Event
 from app.config.globals import shutdown_event
-import socket
+from app.utils.ports import is_port_in_use, wait_for_port_release, kill_process_on_port
 import time
-import platform
-import subprocess
 import logging
+from app.config.globals import discord_bot
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'fallback_secret'
 CORS(app)
-socketio = None  # Initialize later to avoid potential circular import issues
+socketio = None
 server_thread = None
 server_started = Event()
 
@@ -30,73 +30,6 @@ def initialize_socketio():
         except Exception as e:
             logger.error(f"Failed to initialize SocketIO: {e}")
             raise
-
-def is_port_in_use(port):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        try:
-            sock.bind(('127.0.0.1', port))
-            return False
-        except OSError:
-            return True
-        except Exception as e:
-            logger.error(f"Unexpected error checking port {port}: {e}")
-            return True
-
-def wait_for_port_release(port, timeout=30):
-    """Wait for port to be released, up to timeout seconds."""
-    logger.info(f"Waiting for port {port} to be released (timeout: {timeout}s)")
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        if not is_port_in_use(port):
-            logger.info(f"Port {port} is now available")
-            return True
-        time.sleep(1)
-    logger.warning(f"Timeout waiting for port {port} to be released")
-    return False
-
-def kill_process_on_port(port=5000):
-    """Attempt to find and kill the process occupying the given port."""
-    logger.info(f"Attempting to kill process on port {port}")
-    system = platform.system().lower()
-
-    try:
-        if system == 'windows':
-            cmd_find = ['netstat', '-ano']
-            result = subprocess.run(cmd_find, capture_output=True, text=True)
-            lines = result.stdout.splitlines()
-            pid_to_kill = None
-            
-            for line in lines:
-                if f':{port}' in line and 'LISTENING' in line:
-                    parts = line.split()
-                    pid_to_kill = parts[-1]
-                    break
-                    
-            if pid_to_kill is not None:
-                subprocess.run(['taskkill', '/PID', pid_to_kill, '/F'])
-                logger.info(f"Killed process with PID {pid_to_kill} on port {port}")
-                return True
-            else:
-                logger.warning(f"No process found listening on port {port}")
-                return False
-
-        else:  # Linux/macOS
-            cmd_find = ['lsof', '-t', f'-i:{port}']
-            result = subprocess.run(cmd_find, capture_output=True, text=True)
-            pids = result.stdout.strip().splitlines()
-            
-            if pids:
-                for pid in pids:
-                    subprocess.run(['kill', '-9', pid])
-                    logger.info(f"Killed process with PID {pid} on port {port}")
-                return True
-            else:
-                logger.warning(f"No process found listening on port {port}")
-                return False
-
-    except Exception as e:
-        logger.error(f"Error killing process on port {port}: {e}")
-        return False
 
 def start_flask_app(settings_manager):
     global server_thread, socketio
@@ -126,7 +59,7 @@ def start_flask_app(settings_manager):
         # Import routes here to avoid circular imports
         try:
             from app.web.routes import initialize_routes
-            initialize_routes(app, settings_manager, socketio)
+            initialize_routes(app, settings_manager, socketio, port, discord_bot)
             logger.info("Routes initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize routes: {e}")
@@ -134,7 +67,7 @@ def start_flask_app(settings_manager):
 
         def run_server():
             try:
-                socketio.run(app, host='127.0.0.1', port=port, use_reloader=False)
+                socketio.run(app, host='127.0.0.1', port=port, use_reloader=False, allow_unsafe_werkzeug=True)
             except Exception as e:
                 logger.error(f"Error in server thread: {e}")
                 server_started.clear()

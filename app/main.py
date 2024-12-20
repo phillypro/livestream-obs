@@ -13,16 +13,17 @@ except ImportError:
     print("OBS Python bindings not available.")
     obs_available = False
 
-from app.config.settings_manager import SettingsManager
+from app.config.globals import shutdown_event, tiktok_streamer, instagram_streamer, settings_manager
 from app.obs.obs_client import ObsClient
 from app.web.server import start_flask_app, stop_flask_app
-from app.services.discord_bot import DiscordBot
 from app.video_processing.capture import FrameCapturer
 from app.video_processing.account_details import process_account
 from app.video_processing.orders import process_orders
 from app.video_processing.charts import process_chart
 from app.video_processing.awards import profit_awards
-from app.config.globals import shutdown_event, tiktok_streamer, instagram_streamer
+from app.config.globals import shutdown_event, tiktok_streamer, instagram_streamer, obs_ready
+from app.services.discord_service import DiscordBot  # Import DiscordBot
+from app.config import globals
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(base_dir, '..', '.env')
@@ -35,6 +36,36 @@ discord_bot = None
 discord_thread = None
 frame_capturer = None
 loop_thread = None
+
+
+def start_discord_bot(socketio):
+    global discord_bot
+    if DISCORD_BOT_TOKEN:
+        try:
+            discord_bot = DiscordBot(token=DISCORD_BOT_TOKEN, socketio=socketio)
+            discord_thread = threading.Thread(
+                target=discord_bot.run,
+                name="DiscordBotThread",
+                daemon=True
+            )
+            discord_thread.start()
+            globals.discord_bot = discord_bot
+
+            return discord_bot, discord_thread
+        except Exception as e:
+            print(f"Error initializing Discord bot: {e}")
+            return None, None
+    else:
+        print("DISCORD_BOT_TOKEN not provided, skipping Discord bot startup.")
+        return None, None
+
+def stop_discord_bot():
+    global discord_bot, discord_thread
+    if discord_bot:
+        discord_bot.stop()
+    if discord_thread and discord_thread.is_alive():
+        discord_thread.join(timeout=5)  # Wait for the bot to stop
+
 
 def handle_shutdown_signal(signum, frame):
     if obs_available and hasattr(obs, 'script_log'):
@@ -92,6 +123,9 @@ def loop_function():
 def on_obs_ready():
     print("OBS is ready, starting Flask app...")
     try:
+        from app.config.globals import obs_ready
+        obs_ready.set()
+        
         def on_version_received(version_info):
             if version_info:
                 print(f"OBS-WebSocket version info: {version_info}")
@@ -147,11 +181,8 @@ def main():
     global obs_client, discord_bot, discord_thread, frame_capturer, loop_thread
 
     try:
-        # Create settings_manager here
-        from app.config.globals import settings_manager as global_settings_manager
-        local_settings_manager = SettingsManager()
-        from app.config import globals
-        globals.settings_manager = local_settings_manager
+        # Get the already initialized settings manager
+        from app.config.globals import settings_manager
 
         signal.signal(signal.SIGINT, handle_shutdown_signal)
         signal.signal(signal.SIGTERM, handle_shutdown_signal)

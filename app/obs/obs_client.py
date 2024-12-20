@@ -2,7 +2,8 @@
 import json
 import threading
 import time
-from websocket import WebSocket, create_connection, WebSocketTimeoutException, WebSocketConnectionClosedException
+import queue
+from websocket import create_connection, WebSocketTimeoutException, WebSocketConnectionClosedException
 from app.config.globals import shutdown_event
 
 class ObsClient:
@@ -11,78 +12,92 @@ class ObsClient:
         self.host = "ws://localhost:4455"
         self.listener_thread = None
         self.connection_thread = None
+        self.request_thread = None
         self.lock = threading.Lock()
         self.connected = False
         self.ready = threading.Event()
-        self.debug = True
-        self.responses = {}  # Maps requestId -> response data from OBS
-        self.reconnect_attempts = 0
-        self.max_reconnect_attempts = 5
-
+        self.debug = False
+        self.responses = {}
+        self.request_queue = queue.Queue()
         self.on_ready_callback = None
         self.on_connection_failed_callback = None
+        self.retry_attempts = 3
+        self.current_retry = 0
+        
+        # Start request processing thread
+        self.request_thread = threading.Thread(target=self._process_requests, daemon=True)
+        self.request_thread.start()
 
     def log(self, message):
         if self.debug:
-            print(f"[OBS Client] {message}")
+            print(f"OBS Client: {message}")
 
     def start_connection(self):
+        """Initialize connection in separate thread"""
         self.connection_thread = threading.Thread(target=self._connect_async, daemon=True)
         self.connection_thread.start()
 
     def _connect_async(self):
-        try:
-            self.log("Attempting to connect to OBS WebSocket...")
-            self.ws = create_connection(self.host, timeout=10)
+        """Attempt to establish connection to OBS WebSocket"""
+        while self.current_retry < self.retry_attempts:
+            try:
+                self.ws = create_connection(self.host, timeout=10)
+                hello_message = json.loads(self.ws.recv())
 
-            hello_message = json.loads(self.ws.recv())
-            self.log(f"Received hello message: {hello_message}")
-
-            if hello_message.get('op') == 0:  # Hello
-                identify_message = {
-                    "op": 1,
-                    "d": {
-                        "rpcVersion": 1,
-                        "eventSubscriptions": 33
+                if hello_message.get('op') == 0:  # Hello
+                    identify_message = {
+                        "op": 1,
+                        "d": {
+                            "rpcVersion": 1,
+                            "eventSubscriptions": 33
+                        }
                     }
-                }
-                self.log("Sending identify message...")
-                self.ws.send(json.dumps(identify_message))
+                    self.ws.send(json.dumps(identify_message))
 
-                identified_response = json.loads(self.ws.recv())
-                self.log(f"Received identify response: {identified_response}")
+                    identified_response = json.loads(self.ws.recv())
 
-                if identified_response.get('op') == 2:  # Identified
-                    self.connected = True
-                    self.reconnect_attempts = 0  # Reset reconnection attempts on successful connection
-                    self.start_listener_thread()
-                    return
+                    if identified_response.get('op') == 2:  # Identified
+                        self.connected = True
+                        self.start_listener_thread()
+                        return
 
-            self.log("Failed to complete connection sequence")
-            if self.on_connection_failed_callback:
-                self.on_connection_failed_callback()
+                self._handle_connection_failure()
 
-        except Exception as e:
-            self.log(f"Error connecting to OBS WebSocket: {str(e)}")
-            if self.ws:
-                try:
-                    self.ws.close()
-                except:
-                    pass
-                self.ws = None
-            if self.on_connection_failed_callback:
-                self.on_connection_failed_callback()
+            except Exception as e:
+                self.log(f"Connection error: {e}")
+                if self.ws:
+                    try:
+                        self.ws.close()
+                    except:
+                        pass
+                    self.ws = None
+                self.current_retry += 1
+                time.sleep(2)  # Backoff before retrying
+
+        if self.on_connection_failed_callback:
+            self.on_connection_failed_callback()
+
+    def _handle_connection_failure(self):
+        """Handle failed connection attempts"""
+        self.current_retry += 1
+        if self.ws:
+            try:
+                self.ws.close()
+            except:
+                pass
+            self.ws = None
+        time.sleep(2)  # Backoff before retrying
 
     def start_listener_thread(self):
+        """Start the WebSocket listener thread if not already running"""
         if self.listener_thread and self.listener_thread.is_alive():
             return
         
         self.listener_thread = threading.Thread(target=self.listen, daemon=True)
         self.listener_thread.start()
-        self.log("Started listener thread")
 
     def listen(self):
-        event_count = 0
+        """Listen for WebSocket messages"""
         while not shutdown_event.is_set() and self.ws and self.connected:
             try:
                 message = self.ws.recv()
@@ -91,26 +106,20 @@ class ObsClient:
                 
                 try:
                     data = json.loads(message)
-                except json.JSONDecodeError as e:
-                    self.log(f"Error decoding message: {e}")
+                except json.JSONDecodeError:
                     continue
 
                 op = data.get('op')
-                if op == 5:
-                    event_count += 1
-                    event_type = data.get('d', {}).get('eventType')
-                    self.log(f"Received event: {event_type}")
-
-                    if event_count >= 2 and not self.ready.is_set():
-                        self.log("Detected active event stream, marking OBS as ready")
+                if op == 5:  # Event
+                    if not self.ready.is_set():
                         self.ready.set()
                         if self.on_ready_callback:
                             try:
                                 self.on_ready_callback()
-                            except Exception as callback_error:
-                                self.log(f"Error in ready callback: {callback_error}")
+                            except Exception as e:
+                                self.log(f"Ready callback error: {e}")
 
-                elif op == 7:
+                elif op == 7:  # Request Response
                     d = data.get('d', {})
                     request_id = d.get('requestId')
                     if request_id:
@@ -120,63 +129,42 @@ class ObsClient:
             except WebSocketConnectionClosedException:
                 self.log("WebSocket connection closed")
                 self.connected = False
-                self._attempt_reconnect()
                 break
             except WebSocketTimeoutException:
                 continue
             except Exception as e:
-                self.log(f"Error in listener thread: {str(e)}")
-                if isinstance(e, TypeError) and "'module' object is not callable" in str(e):
-                    self.log("WebSocket error - attempting to reconnect...")
-                    self._attempt_reconnect()
-                else:
-                    self.connected = False
+                self.log(f"Listener error: {e}")
+                self.connected = False
                 break
 
-        self.log("Listener thread ending")
+        self.log("Listener thread exiting")
 
-    def _attempt_reconnect(self):
-        """Attempt to reconnect to the WebSocket server"""
-        if self.reconnect_attempts >= self.max_reconnect_attempts:
-            self.log("Max reconnection attempts reached")
-            if self.on_connection_failed_callback:
-                self.on_connection_failed_callback()
-            return
+    def _process_requests(self):
+        """Process OBS requests asynchronously"""
+        while not shutdown_event.is_set():
+            try:
+                # Get request from queue with timeout to allow checking shutdown
+                request = self.request_queue.get(timeout=0.5)
+                if request:
+                    request_type, request_data, callback = request
+                    response = self._send_request_internal(request_type, request_data)
+                    if callback:
+                        try:
+                            callback(response)
+                        except Exception as e:
+                            self.log(f"Callback error: {e}")
+            except queue.Empty:
+                continue
+            except Exception as e:
+                self.log(f"Request processing error: {e}")
 
-        try:
-            self.reconnect_attempts += 1
-            self.log(f"Attempting reconnection (attempt {self.reconnect_attempts}/{self.max_reconnect_attempts})")
-            
-            if self.ws:
-                try:
-                    self.ws.close()
-                except:
-                    pass
-            
-            self.ws = None
-            self.connected = False
-            self.ready.clear()
-            
-            # Exponential backoff for reconnection attempts
-            wait_time = min(30, 2 ** self.reconnect_attempts)  # Cap at 30 seconds
-            time.sleep(wait_time)
-            
-            self._connect_async()
-            
-        except Exception as e:
-            self.log(f"Reconnection attempt failed: {e}")
-
-    def send_request(self, request_type, request_data=None, timeout=5):
-        if threading.current_thread() is threading.main_thread():
-            self.log("WARNING: send_request called from main thread!")
-            return None
-
-        if not self.ready.is_set():
-            self.log("Cannot send request - OBS not ready yet")
-            return None
-
-        if not self.ws or not self.connected:
-            self.log("Not connected to OBS WebSocket server")
+    def send_request(self, request_type, request_data=None, callback=None):
+        """Queue request for async processing"""
+        self.request_queue.put((request_type, request_data, callback))
+        
+    def _send_request_internal(self, request_type, request_data=None, timeout=5):
+        """Internal method to actually send the request"""
+        if not self.ready.is_set() or not self.ws or not self.connected:
             return None
 
         if request_data is None:
@@ -197,7 +185,6 @@ class ObsClient:
                 if request_id in self.responses:
                     del self.responses[request_id]
 
-            self.log(f"Sending request: {payload}")
             self.ws.send(json.dumps(payload))
 
             start_time = time.time()
@@ -206,56 +193,30 @@ class ObsClient:
                     if request_id in self.responses:
                         response = self.responses.pop(request_id)
                         request_status = response.get('requestStatus', {})
-
                         if not request_status.get('result', False):
-                            self.log(f"Request failed: {request_status.get('comment', 'Unknown error')}")
                             return None
-
-                        response_data = response.get('responseData')
-                        if response_data is None:
-                            return True
-                        return response_data
+                        return response.get('responseData') or True
 
                 time.sleep(0.05)
 
-            self.log(f"Request {request_type} timed out after {timeout} seconds.")
             return None
 
         except Exception as e:
-            self.log(f"Error sending request: {e}")
+            self.log(f"Send request error: {e}")
             return None
 
-    def get_version_async(self, callback):
-        def version_thread():
-            try:
-                result = self.send_request("GetVersion")
-                if callback:
-                    callback(result)
-            except Exception as e:
-                self.log(f"Error in version thread: {e}")
-
-        threading.Thread(target=version_thread, daemon=True).start()
-
-    def start_virtual_camera_async(self, callback):
-        def camera_thread():
-            try:
-                response = self.send_request("StartVirtualCam")
-                if callback:
-                    callback(response is True)
-            except Exception as e:
-                self.log(f"Error in camera thread: {e}")
-
-        threading.Thread(target=camera_thread, daemon=True).start()
+    def get_version_async(self, callback=None):
+        """Get OBS version information asynchronously"""
+        self.send_request("GetVersion", callback=callback)
 
     def disconnect(self):
-        self.log("Disconnecting from OBS...")
+        """Disconnect from OBS WebSocket"""
         if self.ws:
             try:
                 self.ws.close()
             except Exception as e:
-                self.log(f"Error closing connection: {str(e)}")
+                self.log(f"Disconnect error: {e}")
             finally:
                 self.ws = None
                 self.connected = False
                 self.ready.clear()
-        self.log("Disconnected from OBS")

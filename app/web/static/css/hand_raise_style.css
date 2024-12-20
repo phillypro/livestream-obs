@@ -1,0 +1,94 @@
+body, html {
+    background: transparent;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  
+  #handStatusWrap {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding-left: 20px;
+    box-sizing: border-box;
+  }
+  
+  #handStatusContainer {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    flex-grow: 1;
+    gap: 15px;
+  }
+  
+  .circle {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    border: 5px solid #62e643;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    flex-shrink: 0; /* Prevent circles from shrinking */
+    position: relative;
+  }
+
+  .hand-icon {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: white; /* Add a white background for contrast */
+    border-radius: 50%;
+    padding: 2px;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5); /* Optional: Add a slight shadow for better visibility */
+  }
+  
+  
+  .circle.visible {
+    opacity: 1;
+    transform: scale(1);
+    animation: slideUpAndPop 0.5s forwards;
+  }
+  
+  .circle.hidden {
+    opacity: 0;
+    transform: scale(1);
+    visibility: hidden;
+  }
+  
+  #moreIndicator {
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    padding: 10px;
+    background-color: #000;
+    border-radius: 5px;
+    border: 2px solid #62e643;
+    transition: opacity 0.5s ease;
+    white-space: nowrap;
+    flex-shrink: 0; /* Prevent the more indicator from shrinking */
+  }
+  
+  #moreIndicator.hidden {
+    opacity: 0;
+    visibility: hidden;
+  }
+  
+  @keyframes slideUpAndPop {
+    0% {
+      opacity: 0;
+      transform: scale(0.8) translateY(20px);
+    }
+    70% {
+      opacity: 1;
+      transform: scale(1.1) translateY(-10px);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+  

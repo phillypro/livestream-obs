@@ -1,0 +1,101 @@
+<!-- settings.html in your templates directory -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Settings</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/settings_style.css') }}">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+</head>
+<body>
+    <div class="wrapper">
+    <h2>Settings</h2>
+    <form id="settingsForm" method="post">
+        <ul class="switches">
+            <li>
+                <input id="1" type="checkbox" name="alerts" {{ 'checked' if alerts else '' }}>
+                <label for="1">
+                    <span>Alerts:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li>
+                <input id="8" type="checkbox" name="broadcastAlert" {{ 'checked' if broadcastAlert else '' }}>
+                <label for="8">
+                    <span>Broadcast Alerts:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li class="textfield">                
+                <label>
+                    Multiplier:
+                </label>
+                <input type="number" name="multiplier" value="{{ multiplier }}">
+            </li>
+            <li>
+                <input id="2" type="checkbox" name="subtitles" {{ 'checked' if subtitles else '' }}>
+                <label for="2">
+                    <span>Enable Subtitles:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li>
+                <input id="3" type="checkbox" name="process" {{ 'checked' if process else '' }}>
+                <label for="3">
+                    <span>Process Videos Now:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li>
+                <input id="4" type="checkbox" name="upscale" {{ 'checked' if upscale else '' }}>
+                <label for="4">
+                    <span>Upscale with AI:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li>
+                <input id="5" type="checkbox" name="post_youtube" {{ 'checked' if post_youtube else '' }}>
+                <label for="5">
+                    <span>Post Youtube:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li>
+                <input id="6" type="checkbox" name="post_instagram" {{ 'checked' if post_instagram else '' }}>
+                <label for="6">
+                    <span>Post Instagram:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li>
+                <input id="7" type="checkbox" name="post_tiktok" {{ 'checked' if post_tiktok else '' }}>
+                <label for="7">
+                    <span>Post TikTok:</span>
+                    <span></span>
+                </label>
+            </li>
+        </ul>        
+    </form>
+</div>
+<script>
+    $(document).ready(function() {
+        function submitForm() {
+            $.ajax({
+                url: '/settings',
+                type: 'post',
+                data: $('#settingsForm').serialize(),
+                success: function(response) {
+                    console.log(response);
+                },
+                error: function(xhr) {
+                    // Handle error
+                }
+            });
+        }
+
+        // Add event listeners to each input in the form
+        $('#settingsForm input').on('change', submitForm);
+    });
+</script>
+</body>
+</html>

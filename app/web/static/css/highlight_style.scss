@@ -1,0 +1,112 @@
+body, html {
+background:transparent;
+}
+.comment {
+    /* Your existing styles */
+    position: fixed;
+    bottom: -100px; /* Start off-screen */
+    width: 80%;
+    left: 49%;
+    transform: translateX(-50%);
+    transition: opacity 0.5s ease;
+    opacity: 0;
+}
+
+.visible {
+    animation: slideUpAndPop 0.5s forwards;
+}
+
+.hidden {
+    animation: slideDownAndDisappear 0.5s forwards;
+}
+
+@keyframes slideUpAndPop {
+    0% {
+        bottom: -100px;
+        opacity: 0;
+        transform: translateX(-50%) scale(0.8);
+    }
+    70% {
+        bottom: 120px;
+        opacity: 1;
+        transform: translateX(-50%) scale(1.1);
+    }
+    100% {
+        bottom: 100px;
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+    }
+}
+
+@keyframes slideDownAndDisappear {
+    0% {
+        bottom: 100px;
+        opacity: 1;
+        transform: translateX(-50%) scale(1);
+    }
+    30% {
+        bottom: 120px;
+        opacity: 1;
+        transform: translateX(-50%) scale(1.1);
+    }
+    100% {
+        bottom: -100px;
+        opacity: 0;
+        transform: translateX(-50%) scale(0.8);
+    }
+}
+
+
+.comment {
+    display: flex;
+    font-family: Open sans,sans-serif;
+}
+
+
+.imgwrap {
+    height: 104px;
+    overflow: hidden;
+    /* padding-bottom: 90px; */
+    padding-top: 0;
+    position: relative;
+    width: 123px;
+    border-radius: 100%;
+    z-index: 999;
+    border: 7px solid #62e643;
+  }
+.imgwrap img {
+    min-height: 100%;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    left: 0;
+    object-fit: cover;
+  }
+
+  .right {
+    width: 100%;
+    transform: translate(-9px, -6px);
+  }
+  #commentText {    color: #fff;
+    background: #000;
+    padding: 20px 20px;
+    font-size: 28px;
+    box-shadow: 10px 10px 10px #0000001a;}
+    #userName {
+        box-shadow: 10px 10px 10px #0000003b;
+        display: inline-block;
+    padding: 10px 20px;
+    font-size: 18px;
+    font-weight: bold;
+    background: #62E643;
+    color: #000;
+    transform: translate(0px, 17%) rotate(-2deg);
+    }
+    #timeStamp {
+        background: #fff;
+        padding: 10px;
+        border: 1px solid #0000001a;
+        box-shadow: 10px 10px 10px #0000001a;
+        transform: rotate(5deg);
+        display: inline-block;
+    }

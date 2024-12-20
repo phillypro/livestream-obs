@@ -54,7 +54,7 @@ class Stream:
     def end(self):
         url = f"https://streamlabs.com/api/v5/slobs/tiktok/stream/{self.id}/end"
         response = self.s.post(url).json()
-        return response["success"]
+        return response.get("success", False)
 
 class TikTokStreamMixin:
     CLIENT_KEY = "awdjaq9ide8ofrtz"
@@ -118,91 +118,68 @@ class TikTokStreamMixin:
             if not token:
                 raise Exception("No token could be retrieved for TikTok stream.")
         # For simplicity, use "Other" as category
-        stream_url, stream_key = self.stream.start(stream_title, "Other")
-        return stream_url, stream_key
+        return self.stream.start(stream_title, "Other")
 
     def end_stream(self):
-        if self.is_live:
+        if self.is_live and self.stream:
             self.stream.end()
             self.is_live = False
         else:
             print("No active stream to end.")
 
-    def updateStreamDetails(self, stream_key, stream_url, ws, index=1):
-        update_stream_key = {
-            "op": 6,
-            "d": {
-                "requestType": "CallVendorRequest",
-                "requestId": f"update_Stream_Key_command_{index}",
-                "requestData": {
-                    "vendorName": "aitum-vertical-canvas",
-                    "requestType": "update_stream_key",
-                    "requestData": {
-                        "stream_key": stream_key,
-                        "index": index
-                    },
-                },
-            },
-        }
-
-        update_stream_server = {
-            "op": 6,
-            "d": {
-                "requestType": "CallVendorRequest",
-                "requestId": f"update_Stream_Server_command_{index}",
-                "requestData": {
-                    "vendorName": "aitum-vertical-canvas",
-                    "requestType": "update_stream_server",
-                    "requestData": {
-                        "stream_server": stream_url,
-                        "index": index
-                    },
-                },
-            },
-        }
-
+    def updateStreamDetails(self, stream_key, stream_url, obs_client, index=1):
         try:
-            ws.send(json.dumps(update_stream_key))
+            obs_client.send_request("CallVendorRequest", {
+                "vendorName": "aitum-vertical-canvas",
+                "requestType": "update_stream_key",
+                "requestData": {
+                    "stream_key": stream_key,
+                    "index": index
+                }
+            })
             print(f'Stream Key for index {index} updated successfully')
 
-            ws.send(json.dumps(update_stream_server))
+            obs_client.send_request("CallVendorRequest", {
+                "vendorName": "aitum-vertical-canvas",
+                "requestType": "update_stream_server",
+                "requestData": {
+                    "stream_server": stream_url,
+                    "index": index
+                }
+            })
             print(f'Stream Server for index {index} updated successfully')
         except Exception as e:
             print(f"Error updating stream details for index {index}: {e}")
 
-    def startStream(self, ws, index=1):
-        start_streaming = {
-            "op": 6,
-            "d": {
-                "requestType": "CallVendorRequest",
-                "requestId": f"start_streaming_command_{index}",
-                "requestData": {
-                    "vendorName": "aitum-vertical-canvas",
-                    "requestType": "start_streaming",
-                    "requestData": {
-                        "index": index
-                    }
-                },
-            },
-        }
+    def startStream(self, obs_client, index=1):
         try:
-            ws.send(json.dumps(start_streaming))
+            obs_client.send_request("CallVendorRequest", {
+                "vendorName": "aitum-vertical-canvas",
+                "requestType": "start_streaming",
+                "requestData": {
+                    "index": index
+                }
+            })
             print(f'Live Stream started for index {index}')
         except Exception as e:
             print(f"Error starting stream for index {index}: {e}")
 
 class TikTokStreamer(TikTokStreamMixin):
-    def start_stream_with_title(self, title, ws):
+    def start_stream_with_title(self, title, obs_client):
         if self.is_live:
             print("Stream is already live.")
             return None, None
         else:
             try:
                 stream_url, stream_key = self.start_stream(stream_title=title)
-                self.updateStreamDetails(stream_key, stream_url, ws, index=1)
-                self.startStream(ws, index=1)
-                self.is_live = True
-                return stream_url, stream_key
+                if stream_url and stream_key:
+                    self.updateStreamDetails(stream_key, stream_url, obs_client, index=1)
+                    self.startStream(obs_client, index=1)
+                    self.is_live = True
+                    return stream_url, stream_key
+                else:
+                    print("Failed to retrieve TikTok stream credentials.")
+                    return None, None
             except Exception as e:
                 print(f"Failed to start TikTok stream: {e}")
                 return None, None

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Hand Raise/Lower Status</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/hand_raise_style.css') }}">
+</head>
+<body>
+    <!-- Container for hand raise circles -->
+    <div id="handStatusWrap">
+        <div id="handStatusContainer" class="status">
+            <!-- Circles will be dynamically added here -->
+        </div>
+        <div id="moreIndicator" class="hidden">+0 more</div> <!-- Hidden by default -->
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-mZLF4UVrpi/QTWPA7BjNPEnkIfRFn4ZEO3Qt/HFklTJBj/gBOV8G3HcKn4NfQblz" crossorigin="anonymous"></script>
+    <script type="text/javascript">
+        var socket = io();
+
+        // Audio element for playing the sound
+        var audio = new Audio("{{ url_for('static', filename='sounds/bloop.mp3') }}");
+    
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+    
+        socket.on('voice_state_update', function(data) {
+            console.log('Received data:', data);
+            if (data.action === 'hand_raised') {
+                addHandCircle(data);
+                playSound();
+            } else if (data.action === 'hand_lowered') {
+                removeHandCircle(data.name);
+            }
+        });
+    
+        function addHandCircle(data) {
+        var handStatusContainer = document.getElementById('handStatusContainer');
+
+        // Create a new circle for the user
+        var circle = document.createElement('div');
+        circle.classList.add('circle');
+        circle.setAttribute('id', 'circle_' + data.name.replace(/\s+/g, '_'));
+
+        // Set the background image to the user's profile picture
+        circle.style.backgroundImage = 'url(' + data.profileImageUrl + ')';
+
+        // Add the hand icon
+        var handIcon = document.createElement('div');
+        handIcon.classList.add('hand-icon');
+        handIcon.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="30" height="30">
+                <path d="M288 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-176c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 272c0 1.5 0 3.1 .1 4.6L67.6 283c-16-15.2-41.3-14.6-56.6 1.4s-14.6 41.3 1.4 56.6L124.8 448c43.1 41.1 100.4 64 160 64l19.2 0c97.2 0 176-78.8 176-176l0-208c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 112c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-176c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 176c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208z"/>
+            </svg>
+        `;
+        circle.appendChild(handIcon);
+
+        // Append the circle to the container
+        handStatusContainer.appendChild(circle);
+
+        // Trigger the animation
+        setTimeout(function() {
+            circle.classList.add('visible');
+        }, 10);
+
+        // Update the more indicator
+        updateMoreIndicator();
+    }
+    
+        function removeHandCircle(name) {
+            var handStatusContainer = document.getElementById('handStatusContainer');
+            var circle = document.getElementById('circle_' + name.replace(/\s+/g, '_'));
+    
+            if (circle) {
+                circle.classList.remove('visible');
+                setTimeout(function() {
+                    handStatusContainer.removeChild(circle);
+                    updateMoreIndicator(); // Update the more indicator after removal
+                }, 500); // Wait for the animation to complete before removing
+            }
+        }
+    
+        function updateMoreIndicator() {
+            var handStatusContainer = document.getElementById('handStatusContainer');
+            var moreIndicator = document.getElementById('moreIndicator');
+            var windowWidth = window.innerWidth;
+    
+            var circles = handStatusContainer.getElementsByClassName('circle');
+            var totalWidth = Array.from(circles).reduce((acc, circle) => acc + circle.offsetWidth + 15, 0); // Sum of circle widths + gaps
+    
+            var availableWidth = handStatusContainer.offsetWidth - moreIndicator.offsetWidth;
+    
+            var visibleCount = circles.length;
+            // Adjust by subtracting a bit more space to fit one extra circle
+            while (totalWidth > availableWidth + 115 && visibleCount > 0) {  // Adjust by adding a buffer
+                visibleCount--;
+                totalWidth -= (circles[visibleCount].offsetWidth + 15);
+            }
+    
+            var hiddenCount = circles.length - visibleCount;
+    
+            // If there are more circles than can fit, show the more indicator
+            if (hiddenCount > 0) {
+                moreIndicator.textContent = `+${hiddenCount} more`;
+                moreIndicator.classList.remove('hidden');
+            } else {
+                moreIndicator.classList.add('hidden');
+            }
+    
+            // Hide the extra circles
+            Array.from(circles).forEach((circle, index) => {
+                if (index < visibleCount) {
+                    circle.style.visibility = 'visible';
+                } else {
+                    circle.style.visibility = 'hidden';
+                }
+            });
+        }
+
+        // Function to play the sound
+        function playSound() {
+            audio.play();
+        }
+    
+        // Add event listener for window resize
+        window.addEventListener('resize', updateMoreIndicator);
+    </script>        
+</body>
+</html>
