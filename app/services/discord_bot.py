@@ -13,7 +13,7 @@ class DiscordBot:
 
         # Customize these IDs as needed or move them to config
         self.specific_user_id = 408163545830785024       # Example user ID
-        self.specific_channel_id = 1148844776624496740   # Example channel ID
+        self.specific_channel_id = 1321214925846085733   # Example channel ID
 
     async def shutdown(self):
         await self.client.close()

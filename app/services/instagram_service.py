@@ -9,6 +9,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from dotenv import load_dotenv
 
+# Assuming settings_manager is available globally
+# If not, adjust the import according to your project's structure
+from app.config.globals import settings_manager
+
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(base_dir, '..', '.env')
 load_dotenv(env_path)
@@ -75,7 +79,6 @@ class InstagramStreamer:
                 return True
         return False
 
-
     def login(self):
         # Go to Instagram homepage
         self.driver.get("https://www.instagram.com/")
@@ -120,7 +123,6 @@ class InstagramStreamer:
         self.handle_notification_popup()
         self.save_cookies()
 
-
     def is_user_logged_in(self):
         # Check if "Create" button is visible, which we assume means the user is logged in
         try:
@@ -128,7 +130,6 @@ class InstagramStreamer:
             return True
         except:
             return False
-
 
     def handle_notification_popup(self):
         # Some accounts will show a "Turn on Notifications" popup; let's skip it
@@ -140,12 +141,15 @@ class InstagramStreamer:
         except:
             pass
 
-
     def start_stream_with_title(self, title, obs_client):
+        # Check if go_live is enabled before doing anything
+        if not settings_manager.get_setting('go_live'):
+            print("Go live is disabled. Not starting Instagram stream.")
+            return None, None
+
         self.init_driver()
         self.login()
 
-        # Adjust these selectors if Instagram's UI changes
         print("Attempting to find 'Create' button...")
         WebDriverWait(self.driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'Create')]"))
@@ -185,21 +189,34 @@ class InstagramStreamer:
             EC.presence_of_element_located((By.NAME, "live-creation-modal-start-pane-stream-key"))
         ).get_attribute('value')
 
+        # we can safely update OBS with the stream details and start the OBS stream.
         self.updateStreamDetails(stream_key, stream_url, obs_client, index=0)
         self.startStream(obs_client, index=0)
 
+        # IMPORTANT: We delay starting the OBS stream until we are actually on
+        # the page waiting for the feed signal and 'Go live' button.
         print("Waiting for feed signal and 'Go live' button...")
-        self.wait_for_feed_signal_and_go_live()
+        go_live_button = self.wait_for_feed_signal_and_go_live(return_button=True)
+
+
+        # Finally, click 'Go live' on Instagram
+        self.driver.execute_script("arguments[0].click();", go_live_button)
 
         self.close()
         print("Instagram Stream is live! Browser closed.")
 
         return stream_url, stream_key
 
-    def wait_for_feed_signal_and_go_live(self):
+
+    def wait_for_feed_signal_and_go_live(self, return_button=False):
         go_live_button = WebDriverWait(self.driver, 300).until(
             EC.element_to_be_clickable((By.XPATH, "//button[.//h4[contains(text(), 'Go live')]]"))
         )
+
+        # If caller wants the button returned, return it instead of clicking here
+        if return_button:
+            return go_live_button
+
         self.driver.execute_script("arguments[0].click();", go_live_button)
 
     def updateStreamDetails(self, stream_key, stream_url, obs_client, index=0):

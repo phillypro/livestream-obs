@@ -16,7 +16,8 @@ from urllib.parse import urlparse, parse_qs
 from requests.auth import HTTPBasicAuth
 from dotenv import load_dotenv
 
-# Load environment variables if needed
+from app.config.globals import settings_manager  # Ensure this import is correct based on your project structure
+
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 env_path = os.path.join(base_dir, '..', '.env')
 load_dotenv(env_path)
@@ -166,6 +167,11 @@ class TikTokStreamMixin:
 
 class TikTokStreamer(TikTokStreamMixin):
     def start_stream_with_title(self, title, obs_client):
+        # Check if go_live is enabled before doing anything
+        if not settings_manager.get_setting('go_live'):
+            print("Go live is disabled. Not starting TikTok stream.")
+            return None, None
+
         if self.is_live:
             print("Stream is already live.")
             return None, None

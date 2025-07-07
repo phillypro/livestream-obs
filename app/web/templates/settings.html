@@ -13,6 +13,19 @@
     <form id="settingsForm" method="post">
         <ul class="switches">
             <li>
+                <input id="9" type="checkbox" name="go_live" {{ 'checked' if go_live else '' }}>
+                <label for="9">
+                    <span>Go Live:</span>
+                    <span></span>
+                </label>
+            </li>
+            <li class="textfield">                
+                <label>
+                    Multiplier:
+                </label>
+                <input type="number" name="multiplier" value="{{ multiplier }}">
+            </li>            
+            <li>
                 <input id="1" type="checkbox" name="alerts" {{ 'checked' if alerts else '' }}>
                 <label for="1">
                     <span>Alerts:</span>
@@ -25,12 +38,6 @@
                     <span>Broadcast Alerts:</span>
                     <span></span>
                 </label>
-            </li>
-            <li class="textfield">                
-                <label>
-                    Multiplier:
-                </label>
-                <input type="number" name="multiplier" value="{{ multiplier }}">
             </li>
             <li>
                 <input id="2" type="checkbox" name="subtitles" {{ 'checked' if subtitles else '' }}>

@@ -5,9 +5,10 @@ class SettingsManager:
     def __init__(self):
         self._lock = threading.Lock()
         self._settings = {
+            "go_live": False,  # New setting
+            "multiplier": 1,
             "alerts": False,
             "broadcastAlert": False,
-            "multiplier": 1,
             "subtitles": True,
             "process": False,
             "upscale": False,

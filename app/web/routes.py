@@ -27,24 +27,26 @@ def initialize_routes(app, settings_manager, socketio):
         if request.method == 'POST':
             # Handle updating settings
             new_settings = {
+                'go_live': 'go_live' in request.form,  # handle the new go_live setting
+                'multiplier': int(request.form.get('multiplier', 1)),
                 'alerts': 'alerts' in request.form,
                 'broadcastAlert': 'broadcastAlert' in request.form,
-                'multiplier': int(request.form.get('multiplier', 1)),
                 'subtitles': 'subtitles' in request.form,
                 'process': 'process' in request.form,
                 'upscale': 'upscale' in request.form,
                 'post_youtube': 'post_youtube' in request.form,
                 'post_instagram': 'post_instagram' in request.form,
-                'post_tiktok': 'post_tiktok' in request.form
+                'post_tiktok': 'post_tiktok' in request.form,
             }
             settings_manager.update_settings(new_settings)
             return jsonify(new_settings)
 
         elif request.method == 'GET':
             current_settings = {
+                'go_live': settings_manager.get_setting('go_live'),  # handle the new go_live setting
+                'multiplier': int(request.form.get('multiplier', 1)),
                 'alerts': settings_manager.get_setting('alerts'),
                 'broadcastAlert': settings_manager.get_setting('broadcastAlert'),
-                'multiplier': settings_manager.get_setting('multiplier'),
                 'process': settings_manager.get_setting('process'),
                 'upscale': settings_manager.get_setting('upscale'),
                 'subtitles': settings_manager.get_setting('subtitles'),

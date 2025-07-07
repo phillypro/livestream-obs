@@ -7,6 +7,7 @@ import pytesseract
 from datetime import datetime
 from app.config.globals import shutdown_event, tiktok_streamer, instagram_streamer, settings_manager, obs_ready
 from app.obs.obs_client import ObsClient
+from app.obs.obs_operations import toggle_recording
 from app.services.stream_manager import StreamManager
 
 
@@ -52,6 +53,7 @@ def ensure_files_exist():
     except Exception as e:
         log_error(f"File creation error: {e}")
 
+
 def log_error(error_message):
     """Log error messages to error_log.txt"""
     try:
@@ -61,7 +63,9 @@ def log_error(error_message):
     except Exception as e:
         print(f"Error writing to error log: {e}")
 
+
 def set_source_color(color, inputName, obs_client: ObsClient):
+    """Wrapper to send a request to OBS for changing a single source color."""
     try:
         obs_client.send_request("SetInputSettings", {
             "inputName": inputName,
@@ -70,7 +74,8 @@ def set_source_color(color, inputName, obs_client: ObsClient):
             }
         })
     except Exception as e:
-        log_error(f"Error setting source color: {e}")
+        log_error(f"Error setting source color for {inputName}: {e}")
+
 
 def toggle_profit_mode(profit_mode: bool, obs_client: ObsClient):
     global global_profit_mode
@@ -108,8 +113,10 @@ def toggle_profit_mode(profit_mode: bool, obs_client: ObsClient):
     except Exception as e:
         log_error(f"Error toggling profit mode: {e}")
 
+
 def correct_ocr_errors(line):
     return re.sub(r'(\d),00(\D|$)', r'\1.00\2', line)
+
 
 def format_percentage_line(line):
     if '-' in line:
@@ -120,8 +127,9 @@ def format_percentage_line(line):
         formatted_line = re.sub(pattern, r'\1', line)
     return formatted_line
 
+
 def write_to_file(file_path, content):
-    """Write content to file with error handling"""
+    """Write content to file with error handling."""
     try:
         with open(file_path, 'w') as f:
             f.write(content)
@@ -130,19 +138,40 @@ def write_to_file(file_path, content):
         log_error(f"Error writing to {file_path}: {e}")
         return False
 
+
 def process_pl(amount, percentage, file_name, overlay_name, data_key, obs_client: ObsClient):
+    """
+    Processes P/L values (either daysPL or openPL). Updates the text file and sets
+    the color on the relevant OBS sources. Also multiplies values by the user-defined
+    multiplier if needed.
+    """
     global global_account_details
     try:
         cleaned_money = float(amount.replace(",", "").replace("+", ""))
         multiplier = settings_manager.get_setting('multiplier')
 
+        # Decide which overlay(s) to update
+        # If you only need both overlays for openPL, check data_key == 'openPL'.
+        # If you also need a second daily overlay, add it similarly for 'daysPL'.
+        if data_key == 'openPL':
+            overlays = [overlay_name, "Profit Overlay 2"]   # <--- Both overlays
+        else:
+            # For daysPL or other data_keys, just do the single overlay
+            overlays = [overlay_name]
+
         if cleaned_money == 0.0:
+            # Write out the raw 0.00 + percentage
             content = f"{amount} {percentage}\n"
             if write_to_file(file_name, content):
-                set_source_color(4291936183, overlay_name, obs_client)
+                # Yellow-ish color if zero
+                zero_color = 4291936183
+                for ovr in overlays:
+                    set_source_color(zero_color, ovr, obs_client)
+
                 global_account_details[data_key]['amount'] = amount
                 global_account_details[data_key]['percentage'] = percentage
         else:
+            # Multiply by user setting
             modified_money = cleaned_money * multiplier
             modified_money_str = f"{modified_money:+,.2f}"
             content = f"{modified_money_str} {percentage}\n"
@@ -151,12 +180,21 @@ def process_pl(amount, percentage, file_name, overlay_name, data_key, obs_client
                 global_account_details[data_key]['amount'] = modified_money_str
                 global_account_details[data_key]['percentage'] = percentage
 
+                # Color is different if negative vs positive
                 color = 4280423350 if cleaned_money < 0 else 4288463367
-                set_source_color(color, overlay_name, obs_client)
+                for ovr in overlays:
+                    set_source_color(color, ovr, obs_client)
+
     except Exception as e:
         log_error(f"Error processing PL for {data_key}: {e}")
 
+
 def process_account(cropped_frame, obs_client: ObsClient = None):
+    """
+    Main function to parse the OCR text from the cropped_frame,
+    update text files, and set colors in OBS for all relevant
+    account details.
+    """
     global global_account_details
     
     if shutdown_event.is_set():
@@ -165,7 +203,6 @@ def process_account(cropped_frame, obs_client: ObsClient = None):
     try:
         ensure_files_exist()
 
-        # Add this check for OBS readiness
         if not obs_ready.is_set():
             log_error("Cannot process account - OBS not ready")
             return
@@ -189,6 +226,7 @@ def process_account(cropped_frame, obs_client: ObsClient = None):
             'daysPL'
         ]
         
+        # We only handle up to 6 lines for the 6 data fields
         lines = lines[:len(data_order)]
         pattern = r'[$]?([+-]?[\d,]+\.\d{2})\s*([$]?[+-]?\d+\.\d+%)?'
 
@@ -199,29 +237,44 @@ def process_account(cropped_frame, obs_client: ObsClient = None):
                     line = correct_ocr_errors(line)
                     line = format_percentage_line(line)
                 
+                # Remove stray alpha chars (common OCR noise)
                 line = re.sub(r"\b[a-zA-Z]+\b", "", line)
                 match = re.findall(pattern, line)
 
                 if match:
                     amount, percentage = match[0]
                     if data_type in ['openPL', 'daysPL']:
+                        # Path to file
                         file_path = os.path.join(logs_dir, f'{data_type}.txt')
-                        overlay_name = "Profit Overlay" if data_type == 'openPL' else "Daily Profit Overlay"
+                        # Choose which overlay name you want as the "main" name
+                        if data_type == 'openPL':
+                            overlay_name = "Profit Overlay"
+                        else:
+                            overlay_name = "Daily Profit Overlay"
+
                         process_pl(amount, percentage, file_path, overlay_name, data_type, obs_client)
                     else:
+                        # For non-PL data, multiply if needed and just write
                         amount_value = float(amount.replace(',', ''))
                         modified_value = amount_value * settings_manager.get_setting('multiplier')
                         global_account_details[data_type] = f"{modified_value:.2f}"
+
                         file_path = os.path.join(logs_dir, f'{data_type}.txt')
                         write_to_file(file_path, f"${modified_value:,.2f}")
             except Exception as e:
                 log_error(f"Error processing line {i} ({data_type}): {e}")
 
-        # Check for awards reset condition
+        # Check for awards reset condition (example condition)
         if float(global_account_details['marketValue']) == 0:
+            # Stop Recording
+            #toggle_recording(start=False, obs_client=obs_client)
             if "profit_mode_active" in global_account_details['openPL']['awards']:
                 toggle_profit_mode(False, obs_client)
             global_account_details['openPL']['awards'] = []
+        #else:
+            # If non-zero => Start Recording
+       
+            #toggle_recording(start=True, obs_client=obs_client)
 
     except KeyboardInterrupt:
         shutdown_event.set()

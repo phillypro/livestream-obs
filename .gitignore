@@ -1,1 +1,11 @@
 .env
+app/logs/
+app/config/__pycache__/settings_manager.cpython-312.pyc
+app/logs/activity.txt
+app/logs/buyingPower.txt
+app/logs/chart.txt
+app/logs/error_log.txt
+app/logs/optionsBP.txt
+app/logs/totalAccountValue.txt
+*.pyc
+__pycache__/
