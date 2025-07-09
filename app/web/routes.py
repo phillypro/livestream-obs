@@ -12,6 +12,7 @@ from app.services.transcription_service import (
     create_ass_file,
 )
 from app.services.premiere_service import launch_premiere_and_import
+from app.video_processing.save_clips import save_replay
 
 def process_replays_for_premiere():
     """
@@ -71,6 +72,29 @@ def initialize_routes(app, settings_manager, socketio):
     @app.route('/')
     def index():
         return "Hello from OBS Integration!"
+
+    @app.route('/api/v1/save_replay', methods=['POST'])
+    def trigger_save_replay():
+        """
+        This endpoint is triggered to save the current replay buffer from vertical canvas.
+        """
+        def save_replay_task():
+            print("--- Kicking off Replay Save ---")
+            if obs_client and obs_client.connected:
+                filename = save_replay(obs_client)
+                if filename:
+                    print(f"--- Replay saved to {filename} ---")
+                else:
+                    print("--- Failed to save replay. ---")
+            else:
+                print("--- OBS not connected. Cannot save replay. ---")
+
+        # Start the save process in a background thread to avoid blocking
+        replay_thread = threading.Thread(target=save_replay_task, daemon=True)
+        replay_thread.start()
+
+        # Immediately return a response so the caller (e.g., Stream Deck) doesn't hang
+        return jsonify({"status": "replay_save_initiated"}), 202
 
     # --- NEW ROUTE FOR STREAM DECK ---
     @app.route('/api/v1/create_premiere_project', methods=['POST'])

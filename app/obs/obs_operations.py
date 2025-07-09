@@ -1,6 +1,7 @@
 # app/obs/obs_operations.py
 import logging
 from app.obs.obs_client import ObsClient
+from app.config import globals
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +14,7 @@ def toggle_recording(start: bool, obs_client: ObsClient = None):
     :param obs_client: An instance of ObsClient; if not provided, we'll grab the global one.
     """
     if obs_client is None:
-        from app.main import obs_client as main_obs_client
-        obs_client = main_obs_client
+        obs_client = globals.obs_client
     
     if not obs_client or not obs_client.connected:
         logger.warning("OBS not connected. Cannot toggle recording.")
@@ -36,8 +36,7 @@ def toggle_streaming(start: bool, obs_client: ObsClient = None):
     :param obs_client: An instance of ObsClient; if not provided, we'll grab the global one.
     """
     if obs_client is None:
-        from app.main import obs_client as main_obs_client
-        obs_client = main_obs_client
+        obs_client = globals.obs_client
     
     if not obs_client or not obs_client.connected:
         logger.warning("OBS not connected. Cannot toggle streaming.")
@@ -59,8 +58,7 @@ def toggle_virtual_camera(start: bool, obs_client: ObsClient = None):
     :param obs_client: An instance of ObsClient; if not provided, we'll grab the global one.
     """
     if obs_client is None:
-        from app.main import obs_client as main_obs_client
-        obs_client = main_obs_client
+        obs_client = globals.obs_client
     
     if not obs_client or not obs_client.connected:
         logger.warning("OBS not connected. Cannot toggle virtual camera.")
@@ -74,6 +72,27 @@ def toggle_virtual_camera(start: bool, obs_client: ObsClient = None):
         obs_client.send_request("StopVirtualCamera")
 
 
+def start_replay_buffer(obs_client: ObsClient = None):
+    """
+    Starts the replay buffer in OBS using the aitum-vertical-canvas plugin.
+    
+    :param obs_client: An instance of ObsClient; if not provided, we'll grab the global one.
+    """
+    if obs_client is None:
+        obs_client = globals.obs_client
+    
+    if not obs_client or not obs_client.connected:
+        logger.warning("OBS not connected. Cannot start replay buffer.")
+        return
+    
+    logger.info("Sending request to start replay buffer (backtrack)...")
+    obs_client.send_request("CallVendorRequest", {
+        "vendorName": "aitum-vertical-canvas",
+        "requestType": "start_backtrack",
+        "requestData": {}
+    })
+
+
 def get_recording_status(obs_client: ObsClient = None) -> dict:
     """
     Returns a dictionary with the current recording status from OBS.
@@ -82,8 +101,7 @@ def get_recording_status(obs_client: ObsClient = None) -> dict:
     :return: A dict with keys like 'isRecording', 'isRecordingPaused', etc., or empty if unavailable.
     """
     if obs_client is None:
-        from app.main import obs_client as main_obs_client
-        obs_client = main_obs_client
+        obs_client = globals.obs_client
     
     if not obs_client or not obs_client.connected:
         logger.warning("OBS not connected. Cannot get recording status.")
@@ -104,8 +122,7 @@ def get_streaming_status(obs_client: ObsClient = None) -> dict:
     :return: A dict with keys like 'isStreaming', 'isRecording', etc., or empty if unavailable.
     """
     if obs_client is None:
-        from app.main import obs_client as main_obs_client
-        obs_client = main_obs_client
+        obs_client = globals.obs_client
     
     if not obs_client or not obs_client.connected:
         logger.warning("OBS not connected. Cannot get streaming status.")

@@ -6,6 +6,7 @@ import json
 import pytesseract
 from datetime import datetime
 from app.config.globals import shutdown_event, tiktok_streamer, instagram_streamer, settings_manager, obs_ready
+from app.config import globals as app_globals
 from app.obs.obs_client import ObsClient
 from app.obs.obs_operations import toggle_recording
 from app.services.stream_manager import StreamManager
@@ -84,8 +85,7 @@ def toggle_profit_mode(profit_mode: bool, obs_client: ObsClient):
         return
 
     if obs_client is None:
-        from app.main import obs_client as main_obs_client
-        obs_client = main_obs_client
+        obs_client = app_globals.obs_client
         if obs_client is None:
             log_error("Cannot toggle profit mode - OBS client not initialized")
             return
@@ -208,8 +208,7 @@ def process_account(cropped_frame, obs_client: ObsClient = None):
             return
 
         if obs_client is None:
-            from app.main import obs_client as main_obs_client
-            obs_client = main_obs_client
+            obs_client = app_globals.obs_client
             if obs_client is None:
                 log_error("Cannot process account - OBS client not initialized")
                 return
