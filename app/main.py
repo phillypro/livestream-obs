@@ -24,7 +24,8 @@ from app.config import globals
 from app.services.discord_service import DiscordBot
 
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-env_path = os.path.join(base_dir, '..', '.env')
+# Correctly point to the .env file in the project's root directory
+env_path = os.path.join(base_dir, '.env')
 load_dotenv(env_path)
 
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
